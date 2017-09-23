@@ -23,4 +23,6 @@ executable slp-data
                      , optparse-applicative
                      , microlens-platform
                      , cassava
+                     , directory
+                     , vector
 		     
