@@ -13,6 +13,8 @@ import Data.Csv ((.!))
 import System.Directory
 import qualified Data.Vector as V
 import qualified Data.Text as T
+import Control.Parallel
+import Control.Parallel.Strategies
 
 data Options = Options { folder :: Text }
 
@@ -117,7 +119,7 @@ showBaseSample (BaseSample d a g s e part p t q1 q2 q3 q4)
   ]
 
 showTimedSample :: TimedSample -> Text
-showTimedSample (TimedSample d a g s e part p t pt q1 q2 q3 q4)
+showTimedSample (TimedSample _ _ _ _ _ _ _ t pt q1 q2 q3 q4)
  = foldr (<>) "" $ intersperse ", "
   [ show t
   , show pt
@@ -168,7 +170,7 @@ main = do
   case (baseSamples, timedSamples) of
     (Right b, Right t) -> do
       print . length $ b
-      mapM_ (printData . uncurry showData) $ fmap (gatherResults t) b 
+      mapM_ (printData . uncurry showData) $ parMap rseq (gatherResults t) b 
     _ -> print "Failed to read values"
   pure ()
 

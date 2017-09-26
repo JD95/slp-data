@@ -25,4 +25,5 @@ executable slp-data
                      , cassava
                      , directory
                      , vector
+                     , parallel
 		     
