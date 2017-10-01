@@ -1,20 +1,23 @@
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE OverloadedStrings, DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings, DeriveGeneric, DeriveAnyClass #-}
+
 module Main where
 
-import Prelude (String, getContents)
-import Protolude
+import           Prelude (String, getContents)
+import           Protolude
 
-import Data.Semigroup ((<>))
-import Options.Applicative
-import Lens.Micro.Platform
+import           Control.DeepSeq
+import           Control.Parallel
+import           Control.Parallel.Strategies
+import           Criterion.Main
+import           Data.Csv ((.!))
 import qualified Data.Csv as CSV
-import Data.Csv ((.!))
-import System.Directory
-import qualified Data.Vector as V
+import           Data.Semigroup ((<>))
 import qualified Data.Text as T
-import Control.Parallel
-import Control.Parallel.Strategies
+import qualified Data.Vector as V
+import           Lens.Micro.Platform
+import           Options.Applicative
+import           System.Directory
 
 data Options = Options { folder :: Text }
 
@@ -49,7 +52,7 @@ data BaseSample
   , question2 :: Int
   , question3 :: Int
   , question4 :: Int
-  } deriving (Show, Generic) 
+  } deriving (Show, Generic, NFData) 
 
 instance CSV.FromRecord BaseSample where
   parseRecord v = BaseSample
@@ -83,7 +86,7 @@ data TimedSample
   , tQuestion2 :: Int
   , tQuestion3 :: Int
   , tQuestion4 :: Int
-  } deriving (Show, Generic)
+  } deriving (Show, Generic, NFData)
 
 instance CSV.FromRecord TimedSample where
   parseRecord v = TimedSample 
@@ -160,18 +163,27 @@ readData path = do
 extractSamples :: CSV.FromRecord f => (Text -> Bool) -> [Text] -> IO (Either String [f])
 extractSamples f = fmap (fmap (concat. fmap V.toList) . sequence)  . sequence . fmap readData . filter f 
 
-main :: IO ()
-main = do
-  options <- execParser optsInfo
-  let path = folder options
+gatherSamples :: Text -> IO (Either String [BaseSample], Either String [TimedSample])
+gatherSamples path = do
   contents <- (fmap . fmap) (T.append (path <> "/") . toS) . listDirectory . toS $ path
   baseSamples <- extractSamples @BaseSample base contents
   timedSamples <- extractSamples @TimedSample timed contents
-  case (baseSamples, timedSamples) of
-    (Right b, Right t) -> do
-      print . length $ b
-      mapM_ (printData . uncurry showData) $ parMap rseq (gatherResults t) b 
-    _ -> print "Failed to read values"
-  pure ()
+  pure (baseSamples, timedSamples)
+
+processSamples f (Right b, Right t) = do
+  mapM_ (printData . uncurry showData) $ f t b 
+processSamples _ _ = print "Failed to read values"
+
+parallelProcess t = parMap rdeepseq (gatherResults t) 
+serialProcess t = map (gatherResults t)
+
+-- For Criterion
+setupEnv = do
+  options <- execParser optsInfo
+  let path = folder options
+  gatherSamples "data" 
+ 
+main :: IO ()
+main = setupEnv >>= processSamples parallelProcess 
 
 
