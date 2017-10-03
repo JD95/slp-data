@@ -29,4 +29,5 @@ executable slp-data
                      , parallel
                      , deepseq
                      , criterion
+                     , containers
 		     

@@ -3,20 +3,20 @@
 
 module Main where
 
-import           Prelude (String, getContents)
-import           Protolude
-
 import           Control.DeepSeq
 import           Control.Parallel
 import           Control.Parallel.Strategies
 import           Criterion.Main
 import           Data.Csv ((.!))
 import qualified Data.Csv as CSV
+import qualified Data.Map as M
 import           Data.Semigroup ((<>))
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import           Lens.Micro.Platform
 import           Options.Applicative
+import           Prelude (String, getContents)
+import           Protolude
 import           System.Directory
 
 data Options = Options { folder :: Text }
@@ -150,10 +150,19 @@ sameParticipant a b
         , passage a == tPassage b
         ]
 
+data Participant = Participant Text Text Text Text Int Text deriving (Show, Eq, Ord)
+
+class Sample a where
+  getParticipant :: a -> Participant
+
+instance Sample BaseSample where
+  getParticipant b = Participant (date b) (gender b) (stutter b) (examiner b) (participant b) (passage b)
+
+instance Sample TimedSample where
+  getParticipant t = Participant (tDate t) (tGender t) (tStutter t) (tExaminer t) (tParticipant t) (tPassage t)
+
 base = T.isSuffixOf "base.csv" . toS
 timed = T.isSuffixOf "timed.csv" . toS
-
-gatherResults ps base = (base, filter (sameParticipant base) ps)
 
 readData :: CSV.FromRecord f => Text -> IO (Either String (V.Vector f))
 readData path = do
@@ -161,7 +170,10 @@ readData path = do
   pure . CSV.decode CSV.NoHeader . toS $ lines
 
 extractSamples :: CSV.FromRecord f => (Text -> Bool) -> [Text] -> IO (Either String [f])
-extractSamples f = fmap (fmap (concat. fmap V.toList) . sequence)  . sequence . fmap readData . filter f 
+extractSamples f = fmap (fmap (concat. fmap V.toList) . sequence)
+                 . sequence
+                 . parMap rseq readData
+                 . filter f 
 
 gatherSamples :: Text -> IO (Either String [BaseSample], Either String [TimedSample])
 gatherSamples path = do
@@ -171,12 +183,16 @@ gatherSamples path = do
   pure (baseSamples, timedSamples)
 
 processSamples f (Right b, Right t) = do
-  mapM_ (printData . uncurry showData) $ f t b 
+  mapM_ (printData) . parShowData . M.elems $ f t b 
 processSamples _ _ = print "Failed to read values"
 
-parallelProcess t = parMap rdeepseq (gatherResults t) 
-serialProcess t = map (gatherResults t)
+parShowData = parMap rdeepseq (uncurry showData) 
 
+groupSamples :: [TimedSample] -> [BaseSample] -> M.Map Participant (BaseSample, [TimedSample])
+groupSamples ts bs = foldr (\t m -> M.update (u t) (getParticipant t) m) (M.fromList (fmap f bs)) ts 
+  where f b = (getParticipant b, (b, []))
+        u t = Just . second ((:) t)
+        
 -- For Criterion
 setupEnv = do
   options <- execParser optsInfo
@@ -184,6 +200,6 @@ setupEnv = do
   gatherSamples "data" 
  
 main :: IO ()
-main = setupEnv >>= processSamples parallelProcess 
+main = setupEnv >>= processSamples groupSamples 
 
 
