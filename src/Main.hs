@@ -5,6 +5,7 @@
 
 module Main where
 
+import           Control.Arrow
 import           Control.DeepSeq
 import           Control.Parallel
 import           Control.Parallel.Strategies
@@ -79,41 +80,61 @@ processSamples _ _ _ = print "Failed to read values"
 
 parShowData = parMap rdeepseq (uncurry showData)
 
+collectKeys :: Ord a => [(a, b)] -> Map a [b]
+collectKeys = foldr (\(k, v) -> M.alter (f v) k) (M.fromList [])
+  where
+    f t (Just ts) = Just (t : ts)
+    f t Nothing   = Just [t]
+
+groupByParticipant :: [BaseSample] -> M.Map Participant [BaseSample]
+groupByParticipant bs = collectKeys $ fmap (getParticipant &&& identity) bs
+
+groupBySample :: [TimedSample] -> [BaseSample] -> M.Map BaseSample [TimedSample]
+groupBySample ts bs = M.fromList $ fmap (f ts) bs
+  where
+    f ts b = (b, filter (samePassage b) ts)
+
 groupSamples ::
      [TimedSample]
   -> [BaseSample]
-  -> M.Map Participant (BaseSample, [TimedSample])
-groupSamples ts bs =
-  foldr
-    (\t m -> M.update (u t) (getParticipant t) m)
-    (M.fromList (fmap f bs))
-    ts
+  -> M.Map Participant (M.Map BaseSample [TimedSample])
+groupSamples ts bs = fmap (groupBySample ts) $ groupByParticipant bs
+
+addNewLine = flip (<>) "\n"
+
+participantColumns p = participantData p : replicate 18 (emptyColumns p)
+
+emptySpace = replicate 10 (T.pack $ replicate 9 ',')
+
+baseSampleColumns b = b ++ emptySpace
+
+timedSampleColumns t = emptySpace ++ t
+
+qualityScore :: BaseSample -> [TimedSample] -> Text
+qualityScore b ts =
+  T.concat $ intersperse (T.pack $ replicate  11 ',') $ baseSampleQuality b : fmap timedSampleQuality ts
+
+onBoth f (a, b) = (f a, f b)
+
+partitionTwisters :: [(BaseSample, [TimedSample])] -> ([Text], [Text])
+partitionTwisters =
+  (baseSampleColumns *** timedSampleColumns) .
+  onBoth (fmap $ uncurry qualityScore) . partition (isTwister . passage . fst)
+
+concatWithComma x y = x <> ", " <> y
+
+showQualityScores :: M.Map Participant (M.Map BaseSample [TimedSample]) -> Text
+showQualityScores = foldr (<>) "" . M.foldMapWithKey f
   where
-    f b = (getParticipant b, (b, []))
-    u t = Just . second ((:) t)
+    f k v =
+     fmap addNewLine $
+     zipWith concatWithComma
+      (participantColumns k)
+       (uncurry (zipWith concatWithComma) .  partitionTwisters . M.toList $ v)
 
-showQualityScores :: M.Map Participant (BaseSample, [TimedSample]) -> Text
-showQualityScores = foldr (<>) "" . M.foldMapWithKey qualityScore
-
-addNewLine = (<>) "\n"
-
-qualityScore :: Participant -> (BaseSample, [TimedSample]) -> [Text]
-qualityScore p (b, ts) =
-  fmap addNewLine $
-  zipWith3
-    (\a b c -> a <> b <> c)
-    participantColumns
-    baseSampleColumns
-    timedSampleColumns
-  where
-    participantColumns = participantData p : replicate 9 (emptyColumns p)
-    baseSampleColumns = baseSampleData b : replicate 9 (emptyColumns b)
-    timedSampleColumns =
-      foldr1 (zipWith (<>)) $
-      fmap (\t -> replicate 9 (emptyColumns t) ++ [showTimedSample t]) ts
-
-processQualityScores (Right b, Right t) =
-  printQualityScores . showQualityScores $ groupSamples t b
+qualityTest = do
+  (b, t) <- setupEnv
+  pure $ (groupSamples <$> t <*> b)
 
 -- For Criterion
 setupEnv = do
@@ -124,5 +145,7 @@ setupEnv = do
 main :: IO ()
 main = do
   e <- setupEnv
-  processSamples groupSamples printData e
-  processQualityScores e
+  case e of
+    (Right b, Right t) -> do
+      printQualityScores . showQualityScores $ groupSamples t b
+      mapM_ printData . join . fmap (fmap (uncurry showData) . M.toList) . M.elems $ groupSamples t b

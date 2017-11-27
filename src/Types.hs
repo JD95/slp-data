@@ -25,7 +25,10 @@ data BaseSample
   , question2   :: Int
   , question3   :: Int
   , question4   :: Int
-  } deriving (Show, Generic, NFData)
+  } deriving (Show, Eq, Generic, NFData)
+
+instance Ord BaseSample where
+  a <= b = passage a <= passage b
 
 instance CSV.FromRecord BaseSample where
   parseRecord v = BaseSample
@@ -105,6 +108,21 @@ baseSampleData (BaseSample _ _ _ _ _ _ p t q1 q2 q3 q4)
   , show q4
   ]
 
+baseSampleQuality :: BaseSample -> Text
+baseSampleQuality (BaseSample _ _ _ _ _ _ p t q1 q2 q3 q4)
+ = foldr (<>) "" $ intersperse ", "
+  [ p
+  , show t
+  , ""
+  , ""
+  , ""
+  , show q1
+  , show q2
+  , show q3
+  , show q4
+  ]
+
+
 showTimedSample :: TimedSample -> Text
 showTimedSample (TimedSample _ _ _ _ _ _ _ t pt q1 q2 q3 q4)
  = foldr (<>) "" $ intersperse ", "
@@ -115,6 +133,21 @@ showTimedSample (TimedSample _ _ _ _ _ _ _ t pt q1 q2 q3 q4)
   , show q3
   , show q4
   ]
+
+timedSampleQuality :: TimedSample -> Text
+timedSampleQuality (TimedSample _ _ _ _ _ _ p t pt q1 q2 q3 q4)
+ = foldr (<>) "" $ intersperse ", "
+  [ show p
+  , ""
+  , ""
+  , ""
+  , show pt
+  , show q1
+  , show q2
+  , show q3
+  , show q4
+  ]
+
 
 sortTimed = sortOn tPercentage
 
@@ -133,7 +166,10 @@ sameParticipant a b
         , passage a == tPassage b
         ]
 
-data Participant = Participant Text Text Text Text Int Text deriving (Show, Eq, Ord)
+samePassage :: BaseSample -> TimedSample -> Bool
+samePassage b t = participant b == tParticipant t && passage b == tPassage t
+
+data Participant = Participant Text Int Text Text Text Int deriving (Show, Eq, Ord)
 
 participantData :: Participant -> Text
 participantData (Participant d a g s e part)
@@ -142,27 +178,43 @@ participantData (Participant d a g s e part)
   , show a
   , g
   , s
-  , show e
-  , part
+  , e
   ]
 
 class Sample a where
   getParticipant :: a -> Participant
 
 instance Sample BaseSample where
-  getParticipant b = Participant (date b) (gender b) (stutter b) (examiner b) (participant b) (passage b)
+  getParticipant b = Participant (date b) (age b) (gender b) (stutter b) (examiner b) (participant b)
 
 instance Sample TimedSample where
-  getParticipant t = Participant (tDate t) (tGender t) (tStutter t) (tExaminer t) (tParticipant t) (tPassage t)
+  getParticipant t = Participant (tDate t) (tAge t) (tGender t) (tStutter t) (tExaminer t) (tParticipant t)
 
 class EmptyColumns a where
   emptyColumns :: a -> Text
 
 instance EmptyColumns Participant where
-  emptyColumns = const (T.pack $ replicate 6 ',')
+  emptyColumns = const (T.pack $ replicate 4 ',')
 
 instance EmptyColumns BaseSample where
   emptyColumns = const (T.pack $ replicate 9 ',')
 
 instance EmptyColumns TimedSample where
   emptyColumns = const (T.pack $ replicate 9 ',')
+
+twisters :: [Text]
+twisters =
+  [ " piper"
+  , " seashells"
+  , " woodchuck"
+  , " tutor"
+  , " oyster"
+  , " perkins"
+  , " perkins"
+  , " moses"
+  , " blackbear"
+  , " chester"
+  , " betty"
+  ]
+
+isTwister = (`elem` twisters)
