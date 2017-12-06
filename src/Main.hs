@@ -127,7 +127,7 @@ showQualityScores :: M.Map Participant (M.Map BaseSample [TimedSample]) -> Text
 showQualityScores = foldr (<>) "" . M.foldMapWithKey f
   where
     f k v =
-     fmap addNewLine $
+     fmap addNewLine $ do
      zipWith concatWithComma
       (participantColumns k)
        (uncurry (zipWith concatWithComma) .  partitionTwisters . M.toList $ v)

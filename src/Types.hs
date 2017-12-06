@@ -8,7 +8,7 @@ import qualified Data.Csv     as CSV
 import qualified Data.Text    as T
 import qualified Data.Vector  as V
 import           GHC.Generics
-import           Prelude      ()
+import qualified Prelude      as P
 import           Protolude
 
 data BaseSample
@@ -216,5 +216,54 @@ twisters =
   , " chester"
   , " betty"
   ]
+
+data Twisters
+  = Piper
+  | Seashells
+  | Woodchuck
+  | Tutor
+  | Oyster
+  | Perkins
+  | Moses
+  | Blackbear
+  | Chester
+  | Betty
+
+instance P.Show Twisters where
+  show Piper     = "piper"
+  show Seashells = "seashells"
+  show Woodchuck = "woodchuck"
+  show Tutor     = "tutor"
+  show Oyster    = "oyster"
+  show Perkins   = "perkins"
+  show Moses     = "moses"
+  show Blackbear = "blackbear"
+  show Chester   = "chester"
+  show Betty     = "betty"
+
+data Anomalus
+  = Peril
+  | Figgy
+  | Ripple
+  | Luber
+  | Local
+  | Bundle
+  | Ribbon
+  | Rally
+  | Lipid
+  | Jello
+
+instance P.Show Anomalus where
+  show Peril  = "peril"
+  show Figgy  = "figgy"
+  show Ripple = "ripple"
+  show Luber  = "luber"
+  show Local  = "local"
+  show Bundle = "bundle"
+  show Ribbon = "ribbon"
+  show Rally  = "rally"
+  show Lipid  = "lipid"
+  show Jello  = "jello"
+
 
 isTwister = (`elem` twisters)
