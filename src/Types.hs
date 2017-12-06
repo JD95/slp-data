@@ -19,13 +19,13 @@ data BaseSample
   , stutter     :: Text
   , examiner    :: Text
   , participant :: Int
-  , passage     :: Text
+  , passage     :: Passage
   , time        :: Double
   , question1   :: Int
   , question2   :: Int
   , question3   :: Int
   , question4   :: Int
-  } deriving (Show, Eq, Generic, NFData)
+  } deriving (Show, Eq, Generic)
 
 instance Ord BaseSample where
   a <= b = passage a <= passage b
@@ -45,7 +45,6 @@ instance CSV.FromRecord BaseSample where
               <*> v .! 10
               <*> v .! 11
 
-instance CSV.ToRecord BaseSample
 
 data TimedSample
   = TimedSample
@@ -55,14 +54,14 @@ data TimedSample
   , tStutter     :: Text
   , tExaminer    :: Text
   , tParticipant :: Int
-  , tPassage     :: Text
+  , tPassage     :: Passage
   , tTime        :: Double
   , tPercentage  :: Double
   , tQuestion1   :: Int
   , tQuestion2   :: Int
   , tQuestion3   :: Int
   , tQuestion4   :: Int
-  } deriving (Show, Generic, NFData)
+  } deriving (Show, Generic)
 
 instance CSV.FromRecord TimedSample where
   parseRecord v = TimedSample
@@ -89,7 +88,7 @@ showBaseSample (BaseSample d a g s e part p t q1 q2 q3 q4)
   , s
   , e
   , show part
-  , p
+  , show p
   , show t
   , show q1
   , show q2
@@ -100,7 +99,7 @@ showBaseSample (BaseSample d a g s e part p t q1 q2 q3 q4)
 baseSampleData :: BaseSample -> Text
 baseSampleData (BaseSample _ _ _ _ _ _ p t q1 q2 q3 q4)
  = foldr (<>) "" $ intersperse ", "
-  [ p
+  [ show p
   , show t
   , show q1
   , show q2
@@ -111,7 +110,7 @@ baseSampleData (BaseSample _ _ _ _ _ _ p t q1 q2 q3 q4)
 baseSampleQuality :: BaseSample -> Text
 baseSampleQuality (BaseSample _ _ _ _ _ _ p t q1 q2 q3 q4)
  = foldr (<>) "" $ intersperse ", "
-  [ p
+  [ show p
   , show t
   , ""
   , ""
@@ -171,6 +170,9 @@ samePassage b t = participant b == tParticipant t && passage b == tPassage t
 
 data Participant = Participant Text Int Text Text Text Int deriving (Show, Eq, Ord)
 
+isPWS :: Participant -> a -> Bool
+isPWS (Participant _ _ _ s _ _) _ = s == " PWS"
+
 participantData :: Participant -> Text
 participantData (Participant d a g s e part)
  = foldr (<>) "" $ intersperse ", "
@@ -200,7 +202,7 @@ instance EmptyColumns BaseSample where
   emptyColumns = const (T.pack $ replicate 9 ',')
 
 instance EmptyColumns TimedSample where
-  emptyColumns = const (T.pack $ replicate 9 ',')
+  emptyColumns = const (T.pack $ replicate 10 ',')
 
 twisters :: [Text]
 twisters =
@@ -217,7 +219,7 @@ twisters =
   , " betty"
   ]
 
-data Twisters
+data Twister
   = Piper
   | Seashells
   | Woodchuck
@@ -228,8 +230,9 @@ data Twisters
   | Blackbear
   | Chester
   | Betty
+    deriving (Eq, Ord)
 
-instance P.Show Twisters where
+instance P.Show Twister where
   show Piper     = "piper"
   show Seashells = "seashells"
   show Woodchuck = "woodchuck"
@@ -252,6 +255,7 @@ data Anomalus
   | Rally
   | Lipid
   | Jello
+    deriving (Eq, Ord)
 
 instance P.Show Anomalus where
   show Peril  = "peril"
@@ -265,5 +269,34 @@ instance P.Show Anomalus where
   show Lipid  = "lipid"
   show Jello  = "jello"
 
+data Passage = T Twister | A Anomalus deriving (Eq, Ord)
 
-isTwister = (`elem` twisters)
+instance P.Show Passage where
+  show (T s) = show s
+  show (A s) = show s
+
+isTwister (T _) = True
+isTwister _     = False
+
+instance CSV.FromField Passage where
+  parseField " 1"         = pure $ A Peril
+  parseField " 2"         = pure $ A Figgy
+  parseField " 3"         = pure $ A Ripple
+  parseField " 4"         = pure $ A Luber
+  parseField " 5"         = pure $ A Local
+  parseField " 6"         = pure $ A Bundle
+  parseField " 7"         = pure $ A Ribbon
+  parseField " 8"         = pure $ A Rally
+  parseField " 9"         = pure $ A Lipid
+  parseField " 10"        = pure $ A Jello
+  parseField " piper"     = pure $ T Piper
+  parseField " seashells" = pure $ T Seashells
+  parseField " woodchuck" = pure $ T Woodchuck
+  parseField " tutor"     = pure $ T Tutor
+  parseField " oyster"    = pure $ T Oyster
+  parseField " perkins"   = pure $ T Perkins
+  parseField " moses"     = pure $ T Moses
+  parseField " blackbear" = pure $ T Blackbear
+  parseField " chester"   = pure $ T Chester
+  parseField " betty"     = pure $ T Betty
+  parseField f           = P.fail ("Could not parse " <> toS f <> " as a Passage")

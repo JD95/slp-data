@@ -20,7 +20,7 @@ import qualified Data.Vector                 as V
 import           Lens.Micro.Platform
 import           Options.Applicative
 import           Prelude                     (String, getContents)
-import           Protolude
+import           Protolude                   hiding (second)
 import           System.Directory
 
 import           Types
@@ -46,9 +46,9 @@ optsInfo =
     (fullDesc <> progDesc "Print a simple folder" <>
      header "slp-data - a minimal application")
 
-printData = appendFile "data.csv"
+printData s = appendFile (s <> "-data.csv")
 
-printQualityScores = appendFile "quality-data.csv"
+printQualityScores s = appendFile (s <> "-quality-data.csv")
 
 base = T.isSuffixOf "base.csv" . toS
 
@@ -102,7 +102,7 @@ groupSamples ts bs = fmap (groupBySample ts) $ groupByParticipant bs
 
 addNewLine = flip (<>) "\n"
 
-participantColumns p = participantData p : replicate 18 (emptyColumns p)
+participantColumns p = participantData p : replicate 19 (emptyColumns p)
 
 emptySpace = replicate 10 (T.pack $ replicate 9 ',')
 
@@ -112,9 +112,11 @@ timedSampleColumns t = emptySpace ++ t
 
 qualityScore :: BaseSample -> [TimedSample] -> Text
 qualityScore b ts =
-  T.concat $ intersperse (T.pack $ replicate  11 ',') $ baseSampleQuality b : fmap timedSampleQuality ts
+  T.concat $ intersperse (T.pack $ replicate  11 ',') $ baseSampleQuality b : fmap timedSampleQuality (sortTimedSamples ts)
 
 onBoth f (a, b) = (f a, f b)
+
+sortTimedSamples = sortBy (\a b -> compare (tPercentage a) (tPercentage b))
 
 partitionTwisters :: [(BaseSample, [TimedSample])] -> ([Text], [Text])
 partitionTwisters =
@@ -147,5 +149,16 @@ main = do
   e <- setupEnv
   case e of
     (Right b, Right t) -> do
-      printQualityScores . showQualityScores $ groupSamples t b
-      mapM_ printData . join . fmap (fmap (uncurry showData) . M.toList) . M.elems $ groupSamples t b
+      let samples = groupSamples t b
+      let (pws, pns) = M.partitionWithKey isPWS samples
+      let record s ss = do
+            printQualityScores s . showQualityScores $ ss
+            mapM_ (printData s) . join . fmap (fmap (uncurry showData) . M.toList) . M.elems $ ss
+      record "result/both" samples
+      record "result/pws" pws
+      record "result/pns" pns
+    (Left e, Left e') -> do
+        print e
+        print e'
+    (Left e, _) -> print e
+    (_, Left e) -> print e
